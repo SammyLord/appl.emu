@@ -253,23 +253,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Replace Wozmon's '\' prompt with 'READY'
-                if (!bootMessagePrinted && charCode === 0x5C) {
+                if (!bootMessagePrinted && charCode === 0x5C) { // Wozmon's '\' prompt
                     output.textContent += 'READY\n';
                     bootMessagePrinted = true;
                     suppressNextCR = true;
                     return;
                 }
 
-                // On the Apple 1, backspace was the '_' key, which the monitor would echo.
-                // We intercept this echoed character to provide a modern visual backspace.
-                if (charCode === 0x5F) { // `_` character, from backspace keycode $DF
+                // Wozmon echoes '_' ($5F) for the backspace key ($DF). We intercept it.
+                if (charCode === 0x5F) {
+                    // Visually erase the character.
                     const lastChar = output.textContent.slice(-1);
                     if (lastChar !== '\n' && lastChar !== '\r') {
                          output.textContent = output.textContent.slice(0, -1);
                     }
-                } else if (charCode === 0x0D) { // Carriage Return
-                    // Wozmon sends a CR when backspace is pressed on an empty line.
-                    // We prevent this from creating a new line for a more modern feel.
+                    
+                    // Hacky Workaround:
+                    // Make Wozmon's backspace destructive by clearing the character and
+                    // the echoed backspace from RAM. We replace them with spaces ($20), 
+                    // which the Wozmon parser ignores.
+                    const backspaceCharAddr = 0x0200 + cpu.y;
+                    const previousCharAddr = backspaceCharAddr - 1;
+
+                    if (previousCharAddr >= 0x0200) {
+                        ram[previousCharAddr] = 0x20; // Erase previous character
+                        ram[backspaceCharAddr] = 0x20; // Erase the '_'
+                    }
+                    
+                    return; // Don't print the '_'
+                }
+                
+                if (charCode === 0x0D) { // Carriage Return
                     const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
                     if (lastLine !== '') {
                         output.textContent += '\n';
