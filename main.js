@@ -309,9 +309,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // A simple execution loop
         // In a real emulator, this would be more complex to manage timing.
         setInterval(() => {
-            // Wozmon is fast, so let's run a bunch of instructions
-            // to make it feel responsive.
-            for (let i = 0; i < 10000; i++) {
+            // The Apple I CPU ran at about 1MHz. We'll approximate that
+            // by running a number of instructions per interval.
+            // 1,000,000 cycles/sec / ~4 cycles/instr * 0.016 sec/interval ~= 4000 instructions
+            for (let i = 0; i < 4000; i++) {
                 cpu.step();
             }
         }, 16);
