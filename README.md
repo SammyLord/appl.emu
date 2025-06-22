@@ -1,4 +1,4 @@
-# Apple 1 Emulator
+# appl.emu
 
 This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs directly in your web browser. It aims to recreate the experience of using one of the first personal computers, complete with Steve Wozniak's original Monitor ROM (Wozmon).
 
