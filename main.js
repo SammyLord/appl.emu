@@ -252,10 +252,11 @@ document.addEventListener('DOMContentLoaded', () => {
                          output.textContent = output.textContent.slice(0, -1);
                     }
                 } else if (charCode === 0x0D) { // Carriage Return
-                    // Wozmon sends a CR when backspace is pressed on an empty line.
-                    // We prevent this from creating a new line for a more modern feel.
+                    // Wozmon sends a CR after the `\` prompt and when backspacing on an empty line.
+                    // We suppress the newline to keep the prompt on the same line for a modern feel.
+                    const lastChar = output.textContent.slice(-1);
                     const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
-                    if (lastLine !== '') {
+                    if (lastLine !== '' && lastChar !== '\\') {
                         output.textContent += '\n';
                     }
                 } else {
