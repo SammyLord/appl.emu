@@ -244,7 +244,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ddrb_written = true;
             } else {
                 const charCode = val & 0x7F;
-                if (charCode === 0x0D) { // Carriage Return
+                if (charCode === (0xDF & 0x7F)) { // Intercept Apple's backspace character
+                    const lastChar = output.textContent.slice(-1);
+                    if (lastChar !== '\n' && lastChar !== '\r') {
+                         output.textContent = output.textContent.slice(0, -1);
+                    }
+                } else if (charCode === 0x0D) { // Carriage Return
                     output.textContent += '\n';
                 } else {
                     output.textContent += String.fromCharCode(charCode);
@@ -279,11 +284,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let appleCharCode;
 
         if (char === 'Backspace') {
-            // Modern convenience: visually remove the character
-            const lastChar = output.textContent.slice(-1);
-            if (lastChar !== '\n' && lastChar !== '\r') {
-                output.textContent = output.textContent.slice(0, -1);
-            }
             appleCharCode = 0xDF; // Apple's back arrow keycode
         } else if (char.length === 1) {
             appleCharCode = char.toUpperCase().charCodeAt(0);
