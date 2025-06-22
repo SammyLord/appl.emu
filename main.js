@@ -291,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (lastLine !== '') {
                         output.textContent += '\n';
                     }
-                } else {
+                } else if (charCode >= 0x20 && charCode <= 0x7E) { // Printable ASCII
                     output.textContent += String.fromCharCode(charCode);
                 }
                 output.scrollTop = output.scrollHeight;
