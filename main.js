@@ -244,13 +244,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 ddrb_written = true;
             } else {
                 const charCode = val & 0x7F;
-                if (charCode === (0xDF & 0x7F)) { // Intercept Apple's backspace character
+                // On the Apple 1, backspace was the '_' key, which the monitor would echo.
+                // We intercept this echoed character to provide a modern visual backspace.
+                if (charCode === 0x5F) { // `_` character, from backspace keycode $DF
                     const lastChar = output.textContent.slice(-1);
                     if (lastChar !== '\n' && lastChar !== '\r') {
                          output.textContent = output.textContent.slice(0, -1);
                     }
                 } else if (charCode === 0x0D) { // Carriage Return
-                    output.textContent += '\n';
+                    // Wozmon sends a CR when backspace is pressed on an empty line.
+                    // We prevent this from creating a new line for a more modern feel.
+                    const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
+                    if (lastLine !== '') {
+                        output.textContent += '\n';
+                    }
                 } else {
                     output.textContent += String.fromCharCode(charCode);
                 }
