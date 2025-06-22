@@ -217,6 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let cra = 0, crb = 0;
     let ddrb_written = false;
+    let bootMessagePrinted = false;
+    let suppressNextCR = false;
 
     function read(addr) {
         if (addr >= 0xD010 && addr <= 0xD013) {
@@ -244,6 +246,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 ddrb_written = true;
             } else {
                 const charCode = val & 0x7F;
+
+                if (suppressNextCR && charCode === 0x0D) {
+                    suppressNextCR = false;
+                    return; // Swallow the CR that follows the Wozmon prompt
+                }
+
+                // Replace Wozmon's '\' prompt with 'READY'
+                if (!bootMessagePrinted && charCode === 0x5C) {
+                    output.textContent += 'READY\n';
+                    bootMessagePrinted = true;
+                    suppressNextCR = true;
+                    return;
+                }
+
                 // On the Apple 1, backspace was the '_' key, which the monitor would echo.
                 // We intercept this echoed character to provide a modern visual backspace.
                 if (charCode === 0x5F) { // `_` character, from backspace keycode $DF
@@ -252,11 +268,10 @@ document.addEventListener('DOMContentLoaded', () => {
                          output.textContent = output.textContent.slice(0, -1);
                     }
                 } else if (charCode === 0x0D) { // Carriage Return
-                    // Wozmon sends a CR after the `\` prompt and when backspacing on an empty line.
-                    // We suppress the newline to keep the prompt on the same line for a modern feel.
-                    const lastChar = output.textContent.slice(-1);
+                    // Wozmon sends a CR when backspace is pressed on an empty line.
+                    // We prevent this from creating a new line for a more modern feel.
                     const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
-                    if (lastLine !== '' && lastChar !== '\\') {
+                    if (lastLine !== '') {
                         output.textContent += '\n';
                     }
                 } else {
