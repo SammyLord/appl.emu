@@ -7,14 +7,14 @@ This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs
 *   **Accurate 6502 Emulation**: The emulator includes a fairly complete 6502 CPU instruction set, allowing it to run original Apple 1 software.
 *   **Wozmon ROM Included**: Comes pre-loaded with the 256-byte Wozmon, the Apple 1's system monitor.
 *   **Retro CRT Effect**: The display is styled to look like a vintage CRT monitor, with scan lines and a flicker effect.
-*   **Modern Conveniences**: Includes quality-of-life improvements over the original hardware, such as a working backspace key and "READY" instead of "\" as the boot message.
+*   **Modern Conveniences**: Includes quality-of-life improvements over the original hardware, such as a working backspace key and "READY" instead of "\" as the boot message for Wozmon prompt.
 *   **No Dependencies**: Pure HTML, CSS, and JavaScript. No build step or external libraries required.
 
 ## How to Use
 
 1.  Clone or download this repository.
 2.  Open the `index.html` file in your favorite web browser.
-3.  The emulator will start, and you will be greeted with the Wozmon prompt (`\`).
+3.  The emulator will start, and you will be greeted with the Wozmon prompt (except it says READY).
 
 ### Testing with a "Hello World" Program
 
@@ -41,7 +41,7 @@ Type the following command and press `Enter`:
 
 The emulator will display `HELLO WORLD` and return to the prompt.
 
-## Original Apple 1 Monitor Test
+### Original Apple 1 Monitor Test
 
 To test the monitor in a more classic fashion, you can enter the following program, which prints the character set in a loop.
 
