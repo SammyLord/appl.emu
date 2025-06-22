@@ -221,6 +221,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let ddrb_written = false;
     let bootMessagePrinted = false;
     let suppressNextCR = false;
+    let displayBuffer = [];
+
+    function updateDisplay() {
+        if (displayBuffer.length > 0) {
+            const char = displayBuffer.shift();
+
+            if (char === 'BACKSPACE') {
+                const lastChar = output.textContent.slice(-1);
+                if (lastChar !== '\n' && lastChar !== '\r') {
+                     output.textContent = output.textContent.slice(0, -1);
+                }
+            } else if (char === '\n') {
+                 const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
+                 if (lastLine !== '') {
+                    output.textContent += '\n';
+                 }
+            } else {
+                output.textContent += char;
+            }
+            output.scrollTop = output.scrollHeight;
+        }
+    }
 
     function read(addr) {
         if (addr >= 0xD010 && addr <= 0xD013) {
@@ -256,20 +278,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Replace Wozmon's '\' prompt with 'READY'
                 if (!bootMessagePrinted && charCode === 0x5C) { // Wozmon's '\' prompt
-                    output.textContent += 'READY\n';
+                    displayBuffer.push(...'READY\n');
                     bootMessagePrinted = true;
                     suppressNextCR = true;
-                    output.scrollTop = output.scrollHeight;
                     return;
                 }
 
                 // Wozmon echoes '_' ($5F) for the backspace key ($DF). We intercept it.
                 if (charCode === 0x5F) {
-                    // Visually erase the character.
-                    const lastChar = output.textContent.slice(-1);
-                    if (lastChar !== '\n' && lastChar !== '\r') {
-                         output.textContent = output.textContent.slice(0, -1);
-                    }
+                    displayBuffer.push('BACKSPACE');
                     
                     // Hacky Workaround:
                     // Make Wozmon's backspace destructive by clearing the character and
@@ -287,14 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 if (charCode === 0x0D) { // Carriage Return
-                    const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
-                    if (lastLine !== '') {
-                        output.textContent += '\n';
-                    }
+                    displayBuffer.push('\n');
                 } else if (charCode >= 0x20 && charCode <= 0x7E) { // Printable ASCII
-                    output.textContent += String.fromCharCode(charCode);
+                    displayBuffer.push(String.fromCharCode(charCode));
                 }
-                output.scrollTop = output.scrollHeight;
             }
             return;
         }
@@ -316,6 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 cpu.step();
             }
         }, 16);
+
+        setInterval(updateDisplay, 30);
 
         // Physical keyboard support
         document.addEventListener('keydown', handleKey);
