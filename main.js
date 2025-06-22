@@ -1,7 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
-    const screen = document.getElementById('screen');
-    const keyboardInput = document.getElementById('keyboard-input');
     let keyboardBuffer = [];
 
     const ram = new Uint8Array(65536); // 64KB of RAM
@@ -243,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function write(addr, val) {
         if (addr === 0xD012) { // Display
-            if (!ddrb_written) {
+             if (!ddrb_written) {
                 // First write is to DDRB
                 ddrb_written = true;
             } else {
@@ -251,107 +249,89 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (suppressNextCR && charCode === 0x0D) {
                     suppressNextCR = false;
-                    return;
+                    return; // Swallow the CR that follows the Wozmon prompt
                 }
 
                 // Replace Wozmon's '\' prompt with 'READY'
                 if (!bootMessagePrinted && charCode === 0x5C) { // Wozmon's '\' prompt
-                    output.textContent = 'READY\n';
+                    output.textContent += 'READY\n';
                     bootMessagePrinted = true;
                     suppressNextCR = true;
-                    output.scrollTop = output.scrollHeight;
                     return;
                 }
 
-                let char = String.fromCharCode(charCode);
+                // Wozmon echoes '_' ($5F) for the backspace key ($DF). We intercept it.
+                if (charCode === 0x5F) {
+                    // Visually erase the character.
+                    const lastChar = output.textContent.slice(-1);
+                    if (lastChar !== '\n' && lastChar !== '\r') {
+                         output.textContent = output.textContent.slice(0, -1);
+                    }
+                    
+                    // Hacky Workaround:
+                    // Make Wozmon's backspace destructive by clearing the character and
+                    // the echoed backspace from RAM. We replace them with spaces ($20), 
+                    // which the Wozmon parser ignores.
+                    const backspaceCharAddr = 0x0200 + cpu.y;
+                    const previousCharAddr = backspaceCharAddr - 1;
 
-                if (char === '\r') {
-                    char = '\n';
+                    if (previousCharAddr >= 0x0200) {
+                        ram[previousCharAddr] = 0x20; // Erase previous character
+                        ram[backspaceCharAddr] = 0x20; // Erase the '_'
+                    }
+                    
+                    return; // Don't print the '_'
                 }
-
-                if (charCode === 0x08) { // Backspace
-                    if (output.textContent.length > 0) {
-                        const lastChar = output.textContent.slice(-1);
-                        if (lastChar === '\n') {
-                            // Don't backspace the newline, but prevent double newline
-                        } else {
-                            output.textContent = output.textContent.slice(0, -1);
-                        }
+                
+                if (charCode === 0x0D) { // Carriage Return
+                    const lastLine = output.textContent.substring(output.textContent.lastIndexOf('\n') + 1);
+                    if (lastLine !== '') {
+                        output.textContent += '\n';
                     }
                 } else {
-                    output.textContent += char;
-                    output.scrollTop = output.scrollHeight;
+                    output.textContent += String.fromCharCode(charCode);
                 }
             }
-        } else {
-            // It's a write to RAM
-            ram[addr] = val;
-
-            // WOZMON destructive backspace workaround
-            if (addr >= 0x0200 && addr < 0x0400) {
-                const lastChar = String.fromCharCode(ram[addr-1] & 0x7F);
-                const currentChar = String.fromCharCode(val & 0x7F);
-                if (lastChar !== '_' && currentChar === '_') {
-                     ram[addr-1] = ' '.charCodeAt(0) | 0x80;
-                }
-            }
+            return;
         }
+        ram[addr] = val;
     }
+
 
     function run() {
         loadRom();
         cpu.reset();
+        
+        // A simple execution loop
+        // In a real emulator, this would be more complex to manage timing.
         setInterval(() => {
-            for (let i = 0; i < 10000; i++) { // Run in chunks to prevent browser freeze
+            // Wozmon is fast, so let's run a bunch of instructions
+            // to make it feel responsive.
+            for (let i = 0; i < 10000; i++) {
                 cpu.step();
             }
-        }, 1);
+        }, 16);
+
+        document.addEventListener('keydown', handleKey);
     }
 
     function handleKey(e) {
-        let key = e.key;
+        e.preventDefault();
+        const char = e.key;
         let appleCharCode;
 
-        if (key.length === 1) {
-            appleCharCode = key.toUpperCase().charCodeAt(0);
-        } else {
-            switch (key) {
-                case 'Enter':
-                    appleCharCode = 0x0D; // CR
-                    break;
-                case 'Backspace':
-                    appleCharCode = 0xDF; // Wozmon backspace char (_ on screen)
-                    break;
-                default:
-                    return; // Ignore other special keys
-            }
+        if (char === 'Backspace') {
+            appleCharCode = 0xDF; // Apple's back arrow keycode
+        } else if (char.length === 1) {
+            appleCharCode = char.toUpperCase().charCodeAt(0);
+        } else if (char === 'Enter') {
+            appleCharCode = 0x8D; // Apple's CR
         }
-        
+
         if (appleCharCode) {
-            keyboardBuffer.push(appleCharCode | 0x80);
+            keyboardBuffer.push(appleCharCode | 0x80); // Set high bit
         }
     }
-
-    // Physical keyboard support
-    document.addEventListener('keydown', handleKey);
-
-    // Mobile software keyboard support
-    screen.addEventListener('click', () => {
-        keyboardInput.focus();
-    });
-
-    keyboardInput.addEventListener('input', (e) => {
-        const text = e.target.value;
-        if (text.length > 0) {
-            const appleCharCode = text.toUpperCase().charCodeAt(text.length - 1);
-            if (appleCharCode) {
-                keyboardBuffer.push(appleCharCode | 0x80);
-            }
-        }
-        // Wozmon echoes characters, so we clear the input field after processing
-        // to be ready for the next character.
-        e.target.value = '';
-    });
-
+    
     run();
-});
+}); 
