@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
+    const screen = document.getElementById('screen');
+    const keyboardInput = document.getElementById('keyboard-input');
     let keyboardBuffer = [];
 
     const ram = new Uint8Array(65536); // 64KB of RAM
@@ -330,7 +332,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Physical keyboard support
     document.addEventListener('keydown', handleKey);
+
+    // Mobile software keyboard support
+    screen.addEventListener('click', () => {
+        keyboardInput.focus();
+    });
+
+    keyboardInput.addEventListener('input', (e) => {
+        const text = e.target.value;
+        if (text.length > 0) {
+            const appleCharCode = text.toUpperCase().charCodeAt(text.length - 1);
+            if (appleCharCode) {
+                keyboardBuffer.push(appleCharCode | 0x80);
+            }
+        }
+        // Wozmon echoes characters, so we clear the input field after processing
+        // to be ready for the next character.
+        e.target.value = '';
+    });
 
     run();
 });
