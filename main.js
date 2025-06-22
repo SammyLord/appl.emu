@@ -259,6 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     output.textContent += 'READY\n';
                     bootMessagePrinted = true;
                     suppressNextCR = true;
+                    output.scrollTop = output.scrollHeight;
                     return;
                 }
 
@@ -293,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     output.textContent += String.fromCharCode(charCode);
                 }
+                output.scrollTop = output.scrollHeight;
             }
             return;
         }
@@ -319,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Software keyboard support
         screen.addEventListener('click', () => {
-            keyboardInput.focus();
+            keyboardInput.focus({ preventScroll: true });
         });
 
         keyboardInput.addEventListener('keydown', (e) => {
