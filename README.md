@@ -45,4 +45,4 @@ The emulator will display `HELLO WORLD` and return to the prompt.
 
 *   `index.html`: The main HTML file that sets up the structure of the emulator display.
 *   `style.css`: Contains the styles for the retro CRT look and feel.
-*   `main.js`: The core of the emulator. It includes the 6502 CPU emulation, memory management, I/O handling, and the Wozmon ROM data. 
+*   `main.js`: The core of the emulator. It includes the 6502 CPU emulation, memory management, I/O handling, convenience features, and the Wozmon ROM data. 
