@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
+    const keyboardInput = document.getElementById('keyboard-input');
+    const screen = document.getElementById('screen');
     let keyboardBuffer = [];
 
     const ram = new Uint8Array(65536); // 64KB of RAM
@@ -312,10 +314,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 16);
 
+        // Physical keyboard support
         document.addEventListener('keydown', handleKey);
+
+        // Software keyboard support
+        screen.addEventListener('click', () => {
+            keyboardInput.focus();
+        });
+
+        keyboardInput.addEventListener('keydown', (e) => {
+            // Handle special keys that don't produce character output
+            let appleCharCode;
+            let handled = true;
+
+            if (e.key === 'Backspace') {
+                appleCharCode = 0xDF;
+            } else if (e.key === 'Enter') {
+                appleCharCode = 0x8D;
+            } else {
+                handled = false;
+            }
+
+            if (handled) {
+                e.preventDefault();
+                keyboardBuffer.push(appleCharCode | 0x80);
+            }
+        });
+
+        keyboardInput.addEventListener('input', (e) => {
+            const text = e.target.value;
+            if (text) {
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    const appleCharCode = char.toUpperCase().charCodeAt(0);
+                    keyboardBuffer.push(appleCharCode | 0x80);
+                }
+            }
+            e.target.value = '';
+        });
     }
 
     function handleKey(e) {
+        // Ignore key events when the hidden input is focused, as they are handled separately.
+        if (e.target === keyboardInput) {
+            return;
+        }
+
         e.preventDefault();
         const char = e.key;
         let appleCharCode;
