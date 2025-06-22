@@ -1,13 +1,13 @@
 # appl.emu
 
-This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs directly in your web browser. It aims to recreate the experience of using one of the first personal computers, complete with Steve Wozniak's original Monitor ROM (Wozmon).
+This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs directly in your web browser. It aims to modernize the experience of using one of the first personal computers, complete with Steve Wozniak's original Monitor ROM (Wozmon).
 
 ## Features
 
 *   **Accurate 6502 Emulation**: The emulator includes a fairly complete 6502 CPU instruction set, allowing it to run original Apple 1 software.
 *   **Wozmon ROM Included**: Comes pre-loaded with the 256-byte Wozmon, the Apple 1's system monitor.
 *   **Retro CRT Effect**: The display is styled to look like a vintage CRT monitor, with scan lines and a flicker effect.
-*   **Modern Conveniences**: Includes quality-of-life improvements over the original hardware, such as a working backspace key.
+*   **Modern Conveniences**: Includes quality-of-life improvements over the original hardware, such as a working backspace key and "READY" instead of "\" as the boot message.
 *   **No Dependencies**: Pure HTML, CSS, and JavaScript. No build step or external libraries required.
 
 ## How to Use
