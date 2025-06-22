@@ -13,10 +13,15 @@ This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs
 ## How to Use
 
 1. Download the latest [release.](https://github.com/sammylord/appl.emu/releases)
-2. Extract
+2. Extract and open "index.html".
 3. The emulator will start, and you will be greeted with the Wozmon prompt (except it says READY).
 
-## How to use (for developers)
+## How to Use (for testers)
+
+1. Clone this repo and open "index.html" OR go [here.](https://sammylord.github.io/appl.emu)
+2. The emulator will start, and you will be greeted with the Wozmon prompt (except it says READY).
+
+## How to Use (for developers)
 
 1, Fork this repository.
 2. Clone that fork.
