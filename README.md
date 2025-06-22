@@ -41,6 +41,20 @@ Type the following command and press `Enter`:
 
 The emulator will display `HELLO WORLD` and return to the prompt.
 
+## Original Apple 1 Monitor Test
+
+To test the monitor in a more classic fashion, you can enter the following program, which prints the character set in a loop.
+
+Enter the following bytes into the monitor:
+```
+0: A9 0 AA 20 EF FF E8 8A 4C 2 0
+```
+
+Then, run the program by typing:
+```
+R
+```
+
 ## File Structure
 
 *   `index.html`: The main HTML file that sets up the structure of the emulator display.
