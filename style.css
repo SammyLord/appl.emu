@@ -136,4 +136,29 @@ body {
 #controls button:hover {
     background-color: #0f0;
     color: #111;
+}
+
+#progress-container {
+    margin-top: 15px;
+    padding: 0 10px;
+}
+
+#progress-status {
+    margin-bottom: 5px;
+    font-size: 14px;
+    text-align: center;
+}
+
+#progress-bar-outer {
+    width: 100%;
+    height: 10px;
+    border: 1px solid #0f0;
+    background-color: #111;
+}
+
+#progress-bar-inner {
+    width: 0%;
+    height: 100%;
+    background-color: #0f0;
+    transition: width 0.2s;
 } 
