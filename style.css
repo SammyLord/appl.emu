@@ -115,4 +115,25 @@ body {
     padding: 0;
     color: transparent;
     caret-color: transparent;
+}
+
+#controls {
+    margin-top: 15px;
+    display: flex;
+    justify-content: space-around;
+}
+
+#controls button {
+    background-color: #222;
+    color: #0f0;
+    border: 1px solid #0f0;
+    padding: 10px 15px;
+    font-family: 'Courier New', Courier, monospace;
+    cursor: pointer;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+#controls button:hover {
+    background-color: #0f0;
+    color: #111;
 } 

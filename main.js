@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
     const keyboardInput = document.getElementById('keyboard-input');
     const screen = document.getElementById('screen');
+    const pasteButton = document.getElementById('paste-button');
+    const tapeButton = document.getElementById('tape-button');
+    const tapeFileInput = document.getElementById('tape-file-input');
     let keyboardBuffer = [];
 
     const ram = new Uint8Array(65536); // 64KB of RAM
@@ -314,6 +317,145 @@ document.addEventListener('DOMContentLoaded', () => {
         ram[addr] = val;
     }
 
+    function loadFromClipboard() {
+        navigator.clipboard.readText().then(text => {
+            const lines = text.split('\n');
+            let bytesLoaded = 0;
+            try {
+                lines.forEach(line => {
+                    line = line.trim();
+                    if (!line) return;
+
+                    const parts = line.split(':');
+                    if (parts.length !== 2) throw new Error(`Invalid line format: "${line}"`);
+                    
+                    let addr = parseInt(parts[0], 16);
+                    if (isNaN(addr)) throw new Error(`Invalid address: "${parts[0]}"`);
+
+                    const byteStrings = parts[1].trim().split(/\s+/);
+                    byteStrings.forEach(byteString => {
+                        if (!byteString) return;
+                        const byte = parseInt(byteString, 16);
+                        if (isNaN(byte)) throw new Error(`Invalid byte: "${byteString}"`);
+                        write(addr, byte);
+                        addr++;
+                        bytesLoaded++;
+                    });
+                });
+                alert(`${bytesLoaded} bytes loaded successfully from clipboard.`);
+            } catch (error) {
+                alert(`Error loading from clipboard: ${error.message}`);
+            }
+        }).catch(err => {
+            alert('Failed to read clipboard contents.');
+            console.error('Clipboard read failed: ', err);
+        });
+    }
+
+    function loadFromCassette() {
+        // This function will be called when the user selects a file.
+        const file = tapeFileInput.files[0];
+        if (!file) {
+            return;
+        }
+
+        alert(`Loading from cassette: ${file.name}`);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const audioData = e.target.result;
+            decodeTapeAudio(audioData);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    async function decodeTapeAudio(arrayBuffer) {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const data = audioBuffer.getChannelData(0);
+            const sampleRate = audioBuffer.sampleRate;
+
+            // Apple I tape format:
+            // '1' bit = 1.0 ms period (1000 Hz)
+            // '0' bit = 0.5 ms period (2000 Hz)
+            const onePeriod = 0.001 * sampleRate;
+            const zeroPeriod = 0.0005 * sampleRate;
+            const periodTolerance = 0.00025 * sampleRate;
+
+            let bits = [];
+            let lastZeroCrossing = 0;
+            for (let i = 1; i < data.length; i++) {
+                // Find positive-going zero-crossings
+                if (data[i-1] < 0 && data[i] >= 0) {
+                    const period = i - lastZeroCrossing;
+                    if (Math.abs(period - onePeriod) < periodTolerance) {
+                        bits.push(1);
+                    } else if (Math.abs(period - zeroPeriod) < periodTolerance) {
+                        bits.push(0);
+                    }
+                    lastZeroCrossing = i;
+                }
+            }
+            
+            if (bits.length === 0) {
+                throw new Error("No valid tape data found. Check audio quality.");
+            }
+
+            // Now, parse the bitstream into bytes
+            // Byte format: start bit (0), 8 data bits (LSB first), 2 stop bits (1,1)
+            let bytes = [];
+            let currentBit = bits.indexOf(0); // Find first start bit
+
+            while (currentBit !== -1 && currentBit + 11 <= bits.length) {
+                if (bits[currentBit] === 0) { // Start bit
+                    const stopBit1 = bits[currentBit + 9];
+                    const stopBit2 = bits[currentBit + 10];
+
+                    if (stopBit1 === 1 && stopBit2 === 1) { // Stop bits
+                        let byte = 0;
+                        for (let i = 0; i < 8; i++) {
+                            if (bits[currentBit + 1 + i] === 1) {
+                                byte |= (1 << i);
+                            }
+                        }
+                        bytes.push(byte);
+                        currentBit += 11;
+                        continue;
+                    }
+                }
+                currentBit = bits.indexOf(0, currentBit + 1);
+            }
+
+            if (bytes.length < 5) { // Need at least start/end addy and checksum
+                throw new Error("Not enough data could be decoded from the tape.");
+            }
+
+            // Finally, load the program from the byte data
+            // Format: [Start Low] [Start High] [End Low] [End High] [DATA...] [Checksum]
+            const startAddr = bytes[0] | (bytes[1] << 8);
+            const endAddr = bytes[2] | (bytes[3] << 8);
+            const programData = bytes.slice(4, 4 + (endAddr - startAddr) + 1);
+            const checksum = bytes[bytes.length - 1];
+            
+            let calculatedChecksum = 0;
+            programData.forEach(byte => calculatedChecksum = (calculatedChecksum + byte) & 0xFF);
+            
+            if (calculatedChecksum !== checksum) {
+                throw new Error(`Checksum mismatch! Tape: ${checksum}, Calculated: ${calculatedChecksum}. Data may be corrupt.`);
+            }
+
+            programData.forEach((byte, index) => {
+                write(startAddr + index, byte);
+            });
+
+            alert(`Successfully loaded ${programData.length} bytes from cassette into memory range ${startAddr.toString(16).toUpperCase()} - ${endAddr.toString(16).toUpperCase()}.`);
+
+        } catch (error) {
+            alert(`Failed to process audio file: ${error.message}`);
+            console.error('Audio decoding failed:', error);
+        }
+    }
 
     function run() {
         loadRom();
@@ -331,6 +473,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 16);
 
         setInterval(updateDisplay, 30);
+
+        pasteButton.addEventListener('click', loadFromClipboard);
+        tapeButton.addEventListener('click', () => tapeFileInput.click());
+        tapeFileInput.addEventListener('change', loadFromCassette);
 
         // Physical keyboard support
         document.addEventListener('keydown', handleKey);
