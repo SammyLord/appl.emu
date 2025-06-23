@@ -3,8 +3,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const keyboardInput = document.getElementById('keyboard-input');
     const screen = document.getElementById('screen');
     const pasteButton = document.getElementById('paste-button');
-    const tapeButton = document.getElementById('tape-button');
-    const tapeFileInput = document.getElementById('tape-file-input');
     const progressContainer = document.getElementById('progress-container');
     const progressStatus = document.getElementById('progress-status');
     const progressBar = document.getElementById('progress-bar-inner');
@@ -567,6 +565,38 @@ document.addEventListener('DOMContentLoaded', () => {
         ram[addr] = val;
     }
 
+    function loadTestProgram() {
+        // Load a simple test program that should work
+        // This program prints "HELLO" and returns to Wozmon
+        const testProgram = [
+            0xA9, 0xC8,        // LDA #$C8 ('H')
+            0x20, 0xEF, 0xFF,  // JSR $FFEF (Wozmon print char)
+            0xA9, 0xC5,        // LDA #$C5 ('E') 
+            0x20, 0xEF, 0xFF,  // JSR $FFEF
+            0xA9, 0xCC,        // LDA #$CC ('L')
+            0x20, 0xEF, 0xFF,  // JSR $FFEF
+            0xA9, 0xCC,        // LDA #$CC ('L')
+            0x20, 0xEF, 0xFF,  // JSR $FFEF
+            0xA9, 0xCF,        // LDA #$CF ('O')
+            0x20, 0xEF, 0xFF,  // JSR $FFEF
+            0xA9, 0x8D,        // LDA #$8D (CR)
+            0x20, 0xEF, 0xFF,  // JSR $FFEF
+            0x00               // BRK (return to Wozmon)
+        ];
+        
+        console.log('Loading simple test program at $0300...');
+        testProgram.forEach((byte, index) => {
+            write(0x0300 + index, byte);
+        });
+        
+        console.log('Test program loaded. Type "300R" to run it.');
+        console.log('Expected output: HELLO followed by return to Wozmon');
+        console.log('Use Ctrl+Shift+T to reload this test program anytime.');
+        
+        // Clear any existing data protection
+        dataLoadedAt = null;
+    }
+
     function loadFromClipboard() {
         showProgress('Loading from clipboard...');
         navigator.clipboard.readText().then(text => {
@@ -604,588 +634,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function loadFromCassette() {
-        // This function will be called when the user selects a file.
-        const file = tapeFileInput.files[0];
-        if (!file) {
-            return;
-        }
-
-        showProgress(`Loading from: ${file.name}`);
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const audioData = e.target.result;
-            decodeTapeAudio(audioData);
-        };
-        reader.onerror = (e) => {
-            showFinalStatus('Error reading file.', true);
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    async function decodeTapeAudio(arrayBuffer) {
-        try {
-            updateProgress(10, 'Decoding audio file...');
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            const data = audioBuffer.getChannelData(0);
-            const sampleRate = audioBuffer.sampleRate;
-
-            updateProgress(20, 'Analyzing Apple I cassette format...');
-            
-            console.log(`Audio file: ${data.length} samples at ${sampleRate}Hz (${(data.length/sampleRate).toFixed(1)}s)`);
-            
-            // Apple I used a variant of Kansas City Standard with specific timing
-            // Standard KCS: 0=4 cycles of 1200Hz, 1=8 cycles of 2400Hz  
-            // But Apple I implementation had variations in timing and thresholds
-            
-            // Detect zero crossings with improved noise filtering
-            const crossings = [];
-            const threshold = 0.02; // Lower threshold for older tapes
-            let lastSign = data[0] >= 0 ? 1 : -1;
-            
-            for (let i = 1; i < data.length; i++) {
-                if (Math.abs(data[i]) > threshold) {
-                    const currentSign = data[i] >= 0 ? 1 : -1;
-                    if (currentSign !== lastSign) {
-                        crossings.push(i);
-                        lastSign = currentSign;
-                    }
-                }
-            }
-
-            console.log(`Found ${crossings.length} zero crossings`);
-            
-            if (crossings.length < 1000) {
-                throw new Error("Insufficient audio signal detected. Check audio quality.");
-            }
-
-            updateProgress(40, 'Decoding Apple I bit patterns...');
-            
-            // Revert to frequency-based analysis since we know the tape has good frequency data
-            // From previous analysis: 800Hz, 1000Hz, 2000Hz peaks detected
-            const bits = [];
-            const frequencies = [];
-            
-            // Calculate frequencies from zero crossings
-            for (let i = 0; i < crossings.length - 2; i++) {
-                const period = crossings[i + 2] - crossings[i]; // Full cycle = 2 zero crossings
-                
-                if (period > 0 && period < sampleRate / 100) { // Valid period range (>100Hz)
-                    const frequency = sampleRate / period;
-                    frequencies.push(frequency);
-                    
-                    // Try inverted polarity - sometimes Apple I tapes have inverted encoding
-                    // High frequency (2000Hz) = '1' bit 
-                    // Low frequency (800Hz, 1000Hz) = '0' bit
-                    // Use 1400Hz as threshold (between 1000Hz and 2000Hz)
-                    
-                    if (frequency < 1400) {
-                        bits.push(0); // Lower frequencies (800Hz, 1000Hz) = '0' bit
-                    } else {
-                        bits.push(1); // Higher frequencies (2000Hz) = '1' bit  
-                    }
-                }
-            }
-            
-            console.log(`Detected ${bits.length} bits from frequency analysis`);
-            
-            // Debug: Show frequency distribution
-            const freqHist = {};
-            frequencies.forEach(f => {
-                const bucket = Math.round(f / 100) * 100;
-                freqHist[bucket] = (freqHist[bucket] || 0) + 1;
-            });
-            console.log('Frequency distribution (100Hz buckets):');
-            Object.keys(freqHist).sort((a, b) => freqHist[b] - freqHist[a]).slice(0, 10).forEach(freq => {
-                console.log(`  ${freq}Hz: ${freqHist[freq]} occurrences`);
-            });
-            
-            // Debug: Show bit pattern samples
-            console.log('Bit pattern samples:');
-            for (let i = 0; i < Math.min(5, Math.floor(bits.length / 1000)); i++) {
-                const start = i * 1000;
-                const sample = bits.slice(start, start + 50).join('');
-                console.log(`Bits ${start}-${start + 49}: ${sample}`);
-            }
-            
-            if (bits.length < 500) {
-                throw new Error("Insufficient bit patterns detected for Apple I format.");
-            }
-
-            updateProgress(60, 'Searching for Apple I sync pattern...');
-            
-            // Apple I sync detection: Look for end of long leader tone
-            let syncPos = -1;
-            
-            // Look for a substantial leader tone (hundreds/thousands of 1s) followed by data transitions
-            for (let i = 1000; i < bits.length - 200; i++) { // Start search after initial leader
-                // Check if we have a long run of 1s ending here
-                let leaderLength = 0;
-                for (let j = i - 1; j >= 0 && bits[j] === 1; j--) {
-                    leaderLength++;
-                    if (leaderLength > 2000) break; // Don't count forever
-                }
-                
-                // If we found a substantial leader (at least 100 bits) and now see data transitions
-                if (leaderLength >= 100 && bits[i] === 0) {
-                    // Check that we have mixed data after this point (not just more leader)
-                    let zeroCount = 0, oneCount = 0;
-                    for (let j = i; j < Math.min(i + 200, bits.length); j++) {
-                        if (bits[j] === 0) zeroCount++;
-                        else oneCount++;
-                    }
-                    
-                                         // We want a good mix of 0s and 1s (actual data, not just leader)
-                     if (zeroCount > 20 && oneCount > 20) {
-                         syncPos = i;
-                         console.log(`Found leader (${leaderLength} ones) ending at bit ${i}, data starts at ${syncPos}`);
-                         
-                         // Debug: Show bit pattern around sync point
-                         console.log('Bit pattern around sync point:');
-                         const showStart = Math.max(0, syncPos - 25);
-                         const showEnd = Math.min(bits.length, syncPos + 75);
-                         for (let k = showStart; k < showEnd; k += 50) {
-                             const chunk = bits.slice(k, Math.min(k + 50, showEnd)).join('');
-                             const marker = (k <= syncPos && syncPos < k + 50) ? ` <-- SYNC at ${syncPos}` : '';
-                             console.log(`Bits ${k}-${Math.min(k + 49, showEnd - 1)}: ${chunk}${marker}`);
-                         }
-                         break;
-                     }
-                }
-            }
-            
-            if (syncPos === -1) {
-                // Fallback: Look for the BEST mixed data section (most balanced 0s and 1s)
-                let bestMixPos = -1;
-                let bestMixScore = 0;
-                
-                for (let i = 500; i < bits.length - 400; i += 50) { // Sample every 50 bits, need more room
-                    let zeroCount = 0, oneCount = 0;
-                    for (let j = i; j < Math.min(i + 400, bits.length); j++) { // Look at 400 bits
-                        if (bits[j] === 0) zeroCount++;
-                        else oneCount++;
-                    }
-                    
-                    // Score based on how balanced the 0s and 1s are (closer to 50/50 is better)
-                    if (zeroCount > 50 && oneCount > 50) { // Need substantial amounts of both
-                        const balance = 1.0 - Math.abs(zeroCount - oneCount) / (zeroCount + oneCount);
-                        const mixScore = balance * (zeroCount + oneCount); // Favor balanced AND substantial data
-                        
-                        if (mixScore > bestMixScore) {
-                            bestMixScore = mixScore;
-                            bestMixPos = i;
-                        }
-                    }
-                }
-                
-                if (bestMixPos !== -1) {
-                    syncPos = bestMixPos;
-                    // Recount for logging
-                    let zeroCount = 0, oneCount = 0;
-                    for (let j = syncPos; j < Math.min(syncPos + 400, bits.length); j++) {
-                        if (bits[j] === 0) zeroCount++;
-                        else oneCount++;
-                    }
-                    console.log(`Best mixed data found at bit ${syncPos} (${zeroCount} zeros, ${oneCount} ones in next 400 bits, balance score: ${bestMixScore.toFixed(2)})`);
-                    
-                    // Debug: Show bit pattern around this better sync point
-                    console.log('Bit pattern around best sync point:');
-                    const showStart = Math.max(0, syncPos - 25);
-                    const showEnd = Math.min(bits.length, syncPos + 75);
-                    for (let k = showStart; k < showEnd; k += 50) {
-                        const chunk = bits.slice(k, Math.min(k + 50, showEnd)).join('');
-                        const marker = (k <= syncPos && syncPos < k + 50) ? ` <-- SYNC at ${syncPos}` : '';
-                        console.log(`Bits ${k}-${Math.min(k + 49, showEnd - 1)}: ${chunk}${marker}`);
-                    }
-                }
-            }
-            
-            if (syncPos === -1 || syncPos >= bits.length - 100) {
-                throw new Error("Could not locate Apple I sync pattern.");
-            }
-
-            updateProgress(75, 'Decoding Apple I data format...');
-            
-            // Apple I byte decoding with multiple format attempts
-            const formatAttempts = [
-                // Apple I standard: start bit + 8 data bits + 2 stop bits
-                { name: 'Apple I Standard', startBits: 1, dataBits: 8, stopBits: 2, expectStart: 0, expectStop: 1 },
-                // Variations for degraded tapes
-                { name: 'Apple I Relaxed', startBits: 1, dataBits: 8, stopBits: 1, expectStart: 0, expectStop: 1 },
-                { name: 'Apple I No Start', startBits: 0, dataBits: 8, stopBits: 2, expectStart: null, expectStop: 1 },
-                // Raw 8-bit in case framing is completely lost
-                { name: 'Raw 8-bit', startBits: 0, dataBits: 8, stopBits: 0, expectStart: null, expectStop: null }
-            ];
-            
-            let bestResult = null;
-            let bestScore = 0;
-            
-            // Try different bit alignments in case we're off by a few bits
-            for (let bitOffset = 0; bitOffset < 8; bitOffset++) {
-                for (const format of formatAttempts) {
-                    const result = decodeAppleIFormat(bits, syncPos + bitOffset, format, sampleRate);
-                    
-                    // Score based on: bytes decoded, Apple I format validity, data patterns
-                    let score = result.bytes.length;
-                    if (result.validAppleI) score += 1000;
-                    if (result.hasValidCode) score += 500;
-                    score -= result.errors * 10;
-                    
-                    // Bonus for fewer illegal opcodes
-                    if (result.bytes.length > 10) {
-                        const validOpcodes = new Set(Object.keys(cpu.instructions).map(k => parseInt(k)));
-                        let legalOpcodes = 0;
-                        for (let i = 0; i < Math.min(32, result.bytes.length); i++) {
-                            if (validOpcodes.has(result.bytes[i]) && cpu.instructions[result.bytes[i]].execute.toString().indexOf('Unimplemented') === -1) {
-                                legalOpcodes++;
-                            }
-                        }
-                        const legalPercent = legalOpcodes / Math.min(32, result.bytes.length);
-                        score += legalPercent * 200; // Bonus for legal opcodes
-                    }
-                    
-                    const formatName = `${format.name} (offset +${bitOffset})`;
-                    console.log(`Format ${formatName}: ${result.bytes.length} bytes, score: ${score}, Apple I: ${result.validAppleI}, errors: ${result.errors}`);
-                    
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestResult = result;
-                        bestResult.formatName = formatName;
-                    }
-                }
-            }
-            
-            if (!bestResult || bestResult.bytes.length < 4) {
-                throw new Error("Could not decode Apple I data format from tape.");
-            }
-            
-            console.log(`Best format: ${bestResult.formatName || bestResult.format.name} with ${bestResult.bytes.length} bytes`);
-            
-            // Debug: Show decoded bytes
-            console.log('First 32 decoded bytes:');
-            const firstBytes = bestResult.bytes.slice(0, 32);
-            let hexStr = '';
-            let asciiStr = '';
-            firstBytes.forEach((byte, i) => {
-                hexStr += byte.toString(16).padStart(2, '0').toUpperCase() + ' ';
-                asciiStr += (byte >= 32 && byte < 127) ? String.fromCharCode(byte) : '.';
-                if ((i + 1) % 16 === 0) {
-                    console.log(`${hexStr} | ${asciiStr}`);
-                    hexStr = '';
-                    asciiStr = '';
-                }
-            });
-            if (hexStr) {
-                console.log(`${hexStr.padEnd(48)} | ${asciiStr}`);
-            }
-            
-            updateProgress(90, 'Loading Apple I program...');
-            
-            // Process the decoded bytes
-            const bytes = bestResult.bytes;
-            let startAddr, endAddr, programData;
-            
-            if (bestResult.validAppleI && bytes.length >= 5) {
-                // Valid Apple I format detected
-                startAddr = bytes[0] | (bytes[1] << 8);
-                endAddr = bytes[2] | (bytes[3] << 8);
-                const dataLength = endAddr - startAddr + 1;
-                
-                console.log(`Apple I format: Start=$${startAddr.toString(16).toUpperCase()}, End=$${endAddr.toString(16).toUpperCase()}, Length=${dataLength}`);
-                
-                // Debug: Show more bytes to analyze the format
-                console.log('First 16 bytes for Apple I analysis:');
-                const first16 = bytes.slice(0, 16);
-                let hexStr = '';
-                first16.forEach((byte, i) => {
-                    hexStr += byte.toString(16).padStart(2, '0').toUpperCase() + ' ';
-                });
-                console.log(hexStr);
-                
-                if (dataLength > 0 && dataLength <= bytes.length - 5) {
-                    // Check if this looks like a suspicious result (very small program with duplicated addresses)
-                    if (dataLength <= 3 && bytes[0] === bytes[2] && bytes[1] === bytes[3]) {
-                        console.log(`Suspicious small program (${dataLength} bytes) with duplicated addresses - trying alternatives...`);
-                        // Jump to alternative interpretation
-                    } else {
-                        programData = bytes.slice(4, 4 + dataLength);
-                        
-                        // Verify checksum if present
-                        if (bytes.length >= 5 + dataLength) {
-                            const checksum = bytes[4 + dataLength];
-                            let sum = 0;
-                            programData.forEach(byte => sum += byte);
-                            
-                            if ((sum & 0xFF) === checksum) {
-                                console.log('Apple I checksum verified!');
-                            } else {
-                                console.log(`Checksum mismatch (calculated: ${sum & 0xFF}, tape: ${checksum})`);
-                            }
-                        }
-                    }
-                }
-                
-                if ((dataLength <= 0) || (dataLength <= 3 && bytes[0] === bytes[2] && bytes[1] === bytes[3] && !programData)) {
-                    // Try alternative interpretation - maybe the addresses are wrong
-                    console.log('Data length <= 0, trying alternative Apple I format interpretation...');
-                    
-                    // Special case: Check if we have duplicated start address (08 02 08 02)
-                    if (bytes[0] === bytes[2] && bytes[1] === bytes[3]) {
-                        console.log('Detected duplicated start address, trying different interpretations...');
-                        
-                        // Try interpretation: start addr + end addr starting at byte 4
-                        const altStart = bytes[4] | (bytes[5] << 8);
-                        const altEnd = bytes[6] | (bytes[7] << 8);
-                        const altLength = altEnd - altStart + 1;
-                        
-                        if (altLength > 0 && altLength < 4096 && altStart >= 0x200 && altStart < 0x8000) {
-                            console.log(`Alt interpretation 1: Start=$${altStart.toString(16).toUpperCase()}, End=$${altEnd.toString(16).toUpperCase()}, Length=${altLength}`);
-                            if (altLength <= bytes.length - 8) {
-                                startAddr = altStart;
-                                endAddr = altEnd;
-                                programData = bytes.slice(8, 8 + altLength);
-                                console.log(`Using alt interpretation 1 with ${programData.length} bytes`);
-                            }
-                        }
-                        
-                        // Try interpretation: use first addr as start, look for reasonable end addr
-                        if (!programData) {
-                            const firstAddr = bytes[0] | (bytes[1] << 8);
-                            // Try using a reasonable program size (e.g., rest of available data)
-                            const availableData = Math.min(1024, bytes.length - 4); // Max 1KB program
-                            console.log(`Alt interpretation 2: Start=$${firstAddr.toString(16).toUpperCase()}, assuming ${availableData} bytes of data`);
-                            
-                            startAddr = firstAddr;
-                            endAddr = firstAddr + availableData - 1;
-                            programData = bytes.slice(4, 4 + availableData);
-                            console.log(`Using alt interpretation 2 with ${programData.length} bytes`);
-                        }
-                    } else {
-                        // Look for different address patterns in the first 16 bytes
-                        for (let offset = 0; offset < 8; offset += 2) {
-                            const altStart = bytes[offset] | (bytes[offset + 1] << 8);
-                            const altEnd = bytes[offset + 2] | (bytes[offset + 3] << 8);
-                            const altLength = altEnd - altStart + 1;
-                            
-                            if (altLength > 0 && altLength < 4096 && altStart >= 0x200 && altStart < 0x8000) {
-                                console.log(`Alternative ${offset/2}: Start=$${altStart.toString(16).toUpperCase()}, End=$${altEnd.toString(16).toUpperCase()}, Length=${altLength}`);
-                                
-                                if (altLength <= bytes.length - offset - 4) {
-                                    startAddr = altStart;
-                                    endAddr = altEnd;
-                                    programData = bytes.slice(offset + 4, offset + 4 + altLength);
-                                    console.log(`Using alternative format ${offset/2} with ${programData.length} bytes`);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (!programData) {
-                        throw new Error(`Invalid Apple I format: data length ${dataLength} doesn't match available bytes`);
-                    }
-                } else {
-                    throw new Error(`Invalid Apple I format: data length ${dataLength} doesn't match available bytes`);
-                }
-            } else {
-                // Treat as raw program data
-                console.log('Treating as raw program data');
-                startAddr = 0x0300; // Default Apple I program start
-                programData = bytes;
-                endAddr = startAddr + programData.length - 1;
-            }
-            
-            if (!programData || programData.length === 0) {
-                throw new Error("No program data extracted from Apple I tape.");
-            }
-            
-            // Analyze program content
-            const validOpcodes = new Set(Object.keys(cpu.instructions).map(k => parseInt(k)));
-            let validInstructions = 0;
-            const sampleSize = Math.min(32, programData.length);
-            
-            for (let i = 0; i < sampleSize; i++) {
-                if (validOpcodes.has(programData[i])) {
-                    validInstructions++;
-                }
-            }
-            
-            const codeConfidence = validInstructions / sampleSize;
-            console.log(`Code analysis: ${validInstructions}/${sampleSize} valid opcodes (${(codeConfidence * 100).toFixed(1)}% confidence)`);
-            
-            // Load into Apple I memory
-            programData.forEach((byte, index) => {
-                write(startAddr + index, byte);
-            });
-            
-            // Debug: Show what was actually loaded into memory
-            console.log(`\nMemory dump at load address $${startAddr.toString(16).toUpperCase()}:`);
-            for (let i = 0; i < Math.min(64, programData.length); i += 16) {
-                let line = `$${(startAddr + i).toString(16).toUpperCase().padStart(4, '0')}: `;
-                let ascii = '';
-                for (let j = 0; j < 16 && i + j < programData.length; j++) {
-                    const byte = programData[i + j];
-                    line += byte.toString(16).toUpperCase().padStart(2, '0') + ' ';
-                    ascii += (byte >= 32 && byte < 127) ? String.fromCharCode(byte) : '.';
-                }
-                console.log(line.padEnd(52) + '| ' + ascii);
-            }
-            
-            let message;
-            // Be more lenient for valid Apple I format programs
-            const confidenceThreshold = bestResult.validAppleI ? 0.2 : 0.3;
-            
-            if (codeConfidence > confidenceThreshold) {
-                // High confidence - likely executable code
-                message = `Apple I program loaded: ${programData.length} bytes from $${startAddr.toString(16).toUpperCase()} to $${endAddr.toString(16).toUpperCase()}. Type "${startAddr.toString(16).toUpperCase()}R" to run.`;
-                console.log('Loaded as executable Apple I program');
-                // Don't set data protection for executable code
-            } else {
-                // Lower confidence - might be data
-                // Low confidence - could be data or imperfect code dump
-                console.log(`Low code confidence (${(codeConfidence * 100).toFixed(1)}%) - use Ctrl+Shift+R to force run as code if needed.`);
-                message = `Loaded ${programData.length} bytes (${(codeConfidence * 100).toFixed(1)}% code confidence) from $${startAddr.toString(16).toUpperCase()} to $${endAddr.toString(16).toUpperCase()}. Use "${startAddr.toString(16).toUpperCase()}.${endAddr.toString(16).toUpperCase()}" to examine, or Ctrl+Shift+R to force run.`;
-                
-                // Only protect low-confidence data from accidental execution
-                dataLoadedAt = { start: startAddr, end: endAddr };
-                
-                // Reset CPU back to Wozmon since this is likely data, not code
-                console.log('Resetting CPU to Wozmon. Use Ctrl+Shift+R if this should be executable code.');
-                cpu.pc = 0xFF00; // Reset to Wozmon entry point
-                cpu.sp = 0xFF;   // Reset stack pointer
-                lastPc = 0xFF00; // Reset stuck detection
-                stuckCount = 0;
-                
-                // Try to display as text if it contains printable characters
-                let textContent = '';
-                let printableCount = 0;
-                for (let i = 0; i < Math.min(100, programData.length); i++) {
-                    const byte = programData[i] & 0x7F; // Strip high bit
-                    if (byte >= 0x20 && byte <= 0x7E) { // Printable ASCII
-                        textContent += String.fromCharCode(byte);
-                        printableCount++;
-                    } else if (byte === 0x0D || byte === 0x0A) { // CR/LF
-                        textContent += '\n';
-                    } else {
-                        textContent += '.';
-                    }
-                }
-                
-                if (printableCount > programData.length * 0.3) { // If >30% printable
-                    console.log('Data appears to contain text:');
-                    console.log(textContent.substring(0, 200));
-                }
-            }
-            
-            showFinalStatus(message);
-
-        } catch (error) {
-            showFinalStatus(`Apple I cassette error: ${error.message}`, true);
-            console.error('Apple I cassette loading failed:', error);
-        }
-    }
-    
-    // Apple I specific format decoder
-    function decodeAppleIFormat(bits, startPos, format, sampleRate) {
-        const bytes = [];
-        let pos = startPos;
-        let errors = 0;
-        let validBytes = 0;
-        
-        const frameSize = format.startBits + format.dataBits + format.stopBits;
-        
-        while (pos + frameSize <= bits.length && bytes.length < 2048) {
-            let valid = true;
-            
-            // Check start bit(s) if required
-            if (format.expectStart !== null) {
-                for (let i = 0; i < format.startBits; i++) {
-                    if (bits[pos + i] !== format.expectStart) {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            
-            if (!valid) {
-                pos++;
-                errors++;
-                continue;
-            }
-            
-            // Extract data bits (LSB first for Apple I)
-            let byte = 0;
-            for (let i = 0; i < format.dataBits; i++) {
-                if (bits[pos + format.startBits + i] === 1) {
-                    byte |= (1 << i);
-                }
-            }
-            
-            // Check stop bit(s) if required
-            if (format.expectStop !== null) {
-                for (let i = 0; i < format.stopBits; i++) {
-                    if (bits[pos + format.startBits + format.dataBits + i] !== format.expectStop) {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            
-            if (valid) {
-                bytes.push(byte);
-                validBytes++;
-                pos += frameSize;
-            } else {
-                pos++;
-                errors++;
-            }
-            
-            // Stop if we're getting too many errors
-            if (errors > validBytes * 2 && bytes.length > 10) break;
-        }
-        
-        // Analyze if this looks like valid Apple I format
-        let validAppleI = false;
-        let hasValidCode = false;
-        
-        if (bytes.length >= 4) {
-            const addr1 = bytes[0] | (bytes[1] << 8);
-            const addr2 = bytes[2] | (bytes[3] << 8);
-            
-            // Apple I addresses typically in range $0200-$8000
-            validAppleI = (addr1 >= 0x0200 && addr1 < 0x8000 && 
-                          addr2 >= addr1 && addr2 < 0x8000 && 
-                          (addr2 - addr1) < 4096);
-            
-            if (validAppleI && bytes.length >= addr2 - addr1 + 5) {
-                // Check if program data contains valid 6502 opcodes
-                const programStart = 4;
-                const programLength = Math.min(32, addr2 - addr1 + 1);
-                let validOpcodes = 0;
-                
-                for (let i = 0; i < programLength; i++) {
-                    const opcode = bytes[programStart + i];
-                    if (cpu.instructions[opcode]) {
-                        validOpcodes++;
-                    }
-                }
-                
-                hasValidCode = validOpcodes / programLength > 0.3;
-            }
-        }
-        
-        return {
-            bytes: bytes,
-            format: format,
-            validAppleI: validAppleI,
-            hasValidCode: hasValidCode,
-            errors: errors,
-            validBytes: validBytes
-        };
-    }
-
     let lastPc = 0;
     let stuckCount = 0;
     let debugMode = true;
@@ -1195,14 +643,64 @@ document.addEventListener('DOMContentLoaded', () => {
     // Helper function to get instruction name for debugging
     function getInstructionName(opcode) {
         const opcodeMap = {
-            0xFE: 'INC abs,X', 0xEE: 'INC abs', 0xE6: 'INC zp', 0xF6: 'INC zp,X',
-            0xDE: 'DEC abs,X', 0xCE: 'DEC abs', 0xC6: 'DEC zp', 0xD6: 'DEC zp,X',
-            0x4C: 'JMP abs', 0x6C: 'JMP (abs)', 0x20: 'JSR abs', 0x60: 'RTS',
-            0xA9: 'LDA #', 0xAD: 'LDA abs', 0xA5: 'LDA zp', 0xB5: 'LDA zp,X',
-            0x8D: 'STA abs', 0x85: 'STA zp', 0x95: 'STA zp,X',
-            0x00: 'BRK', 0xEA: 'NOP', 0x40: 'RTI',
-            0x82: 'NOP #(illegal)', 0x89: 'NOP #(illegal)', 0xC2: 'NOP #(illegal)', 0xE2: 'NOP #(illegal)',
-            0xB0: 'BCS', 0xB2: 'NOP(illegal)', 0x90: 'BCC', 0xF0: 'BEQ', 0xD0: 'BNE'
+            // ADC
+            0x69: 'ADC #', 0x65: 'ADC zp', 0x75: 'ADC zp,X', 0x6D: 'ADC abs', 0x7D: 'ADC abs,X', 0x79: 'ADC abs,Y', 0x61: 'ADC (ind,X)', 0x71: 'ADC (ind),Y',
+            // AND
+            0x29: 'AND #', 0x25: 'AND zp', 0x35: 'AND zp,X', 0x2D: 'AND abs', 0x3D: 'AND abs,X', 0x39: 'AND abs,Y', 0x21: 'AND (ind,X)', 0x31: 'AND (ind),Y',
+            // ASL
+            0x0A: 'ASL A', 0x06: 'ASL zp', 0x16: 'ASL zp,X', 0x0E: 'ASL abs', 0x1E: 'ASL abs,X',
+            // Branch
+            0x90: 'BCC', 0xB0: 'BCS', 0xF0: 'BEQ', 0x30: 'BMI', 0xD0: 'BNE', 0x10: 'BPL', 0x50: 'BVC', 0x70: 'BVS',
+            // BIT
+            0x24: 'BIT zp', 0x2C: 'BIT abs',
+            // BRK
+            0x00: 'BRK',
+            // Clear
+            0x18: 'CLC', 0xD8: 'CLD', 0x58: 'CLI', 0xB8: 'CLV',
+            // Compare
+            0xC9: 'CMP #', 0xC5: 'CMP zp', 0xD5: 'CMP zp,X', 0xCD: 'CMP abs', 0xDD: 'CMP abs,X', 0xD9: 'CMP abs,Y', 0xC1: 'CMP (ind,X)', 0xD1: 'CMP (ind),Y',
+            0xE0: 'CPX #', 0xE4: 'CPX zp', 0xEC: 'CPX abs',
+            0xC0: 'CPY #', 0xC4: 'CPY zp', 0xCC: 'CPY abs',
+            // Decrement
+            0xC6: 'DEC zp', 0xD6: 'DEC zp,X', 0xCE: 'DEC abs', 0xDE: 'DEC abs,X',
+            0xCA: 'DEX', 0x88: 'DEY',
+            // EOR
+            0x49: 'EOR #', 0x45: 'EOR zp', 0x55: 'EOR zp,X', 0x4D: 'EOR abs', 0x5D: 'EOR abs,X', 0x59: 'EOR abs,Y', 0x41: 'EOR (ind,X)', 0x51: 'EOR (ind),Y',
+            // Increment
+            0xE6: 'INC zp', 0xF6: 'INC zp,X', 0xEE: 'INC abs', 0xFE: 'INC abs,X',
+            0xE8: 'INX', 0xC8: 'INY',
+            // Jumps
+            0x4C: 'JMP abs', 0x6C: 'JMP (abs)', 0x20: 'JSR abs',
+            // Load
+            0xA9: 'LDA #', 0xA5: 'LDA zp', 0xB5: 'LDA zp,X', 0xAD: 'LDA abs', 0xBD: 'LDA abs,X', 0xB9: 'LDA abs,Y', 0xA1: 'LDA (ind,X)', 0xB1: 'LDA (ind),Y',
+            0xA2: 'LDX #', 0xA6: 'LDX zp', 0xB6: 'LDX zp,Y', 0xAE: 'LDX abs', 0xBE: 'LDX abs,Y',
+            0xA0: 'LDY #', 0xA4: 'LDY zp', 0xB4: 'LDY zp,X', 0xAC: 'LDY abs', 0xBC: 'LDY abs,X',
+            // LSR
+            0x4A: 'LSR A', 0x46: 'LSR zp', 0x56: 'LSR zp,X', 0x4E: 'LSR abs', 0x5E: 'LSR abs,X',
+            // NOP
+            0xEA: 'NOP',
+            // ORA
+            0x09: 'ORA #', 0x05: 'ORA zp', 0x15: 'ORA zp,X', 0x0D: 'ORA abs', 0x1D: 'ORA abs,X', 0x19: 'ORA abs,Y', 0x01: 'ORA (ind,X)', 0x11: 'ORA (ind),Y',
+            // Push/Pull
+            0x48: 'PHA', 0x08: 'PHP', 0x68: 'PLA', 0x28: 'PLP',
+            // ROL
+            0x2A: 'ROL A', 0x26: 'ROL zp', 0x36: 'ROL zp,X', 0x2E: 'ROL abs', 0x3E: 'ROL abs,X',
+            // ROR
+            0x6A: 'ROR A', 0x66: 'ROR zp', 0x76: 'ROR zp,X', 0x6E: 'ROR abs', 0x7E: 'ROR abs,X',
+            // Return
+            0x40: 'RTI', 0x60: 'RTS',
+            // SBC
+            0xE9: 'SBC #', 0xE5: 'SBC zp', 0xF5: 'SBC zp,X', 0xED: 'SBC abs', 0xFD: 'SBC abs,X', 0xF9: 'SBC abs,Y', 0xE1: 'SBC (ind,X)', 0xF1: 'SBC (ind),Y',
+            // Set
+            0x38: 'SEC', 0xF8: 'SED', 0x78: 'SEI',
+            // Store
+            0x85: 'STA zp', 0x95: 'STA zp,X', 0x8D: 'STA abs', 0x9D: 'STA abs,X', 0x99: 'STA abs,Y', 0x81: 'STA (ind,X)', 0x91: 'STA (ind),Y',
+            0x86: 'STX zp', 0x96: 'STX zp,Y', 0x8E: 'STX abs',
+            0x84: 'STY zp', 0x94: 'STY zp,X', 0x8C: 'STY abs',
+            // Transfer
+            0xAA: 'TAX', 0xA8: 'TAY', 0xBA: 'TSX', 0x8A: 'TXA', 0x9A: 'TXS', 0x98: 'TYA',
+             // Illegal Opcodes
+            0x82: 'NOP #(illegal)', 0x89: 'NOP #(illegal)', 0xC2: 'NOP #(illegal)', 0xE2: 'NOP #(illegal)', 0xB2: 'NOP(illegal)'
         };
         return opcodeMap[opcode] || `Unknown(${opcode.toString(16).padStart(2, '0')})`;
     }
@@ -1250,6 +748,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             console.log('System reset complete. The loaded cassette data is not valid 6502 executable code.');
                             break; // Exit the execution loop for this cycle
+                        }
+                        
+                        // Also detect if we're executing in obviously corrupted areas
+                        if (cpu.pc >= 0x0600 && cpu.pc < 0x0800 && ram[cpu.pc] === 0x00) {
+                            console.log(`WARNING: Executing in likely corrupted area $${cpu.pc.toString(16).toUpperCase()} with BRK/zero bytes`);
+                            console.log('This suggests memory corruption or invalid program data');
                         }
                     }
                     
@@ -1317,8 +821,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setInterval(updateDisplay, 30);
 
         pasteButton.addEventListener('click', loadFromClipboard);
-        tapeButton.addEventListener('click', () => tapeFileInput.click());
-        tapeFileInput.addEventListener('change', loadFromCassette);
+        
+        // Test program shortcut is handled in the main handleKey function
 
         // Physical keyboard support
         document.addEventListener('keydown', handleKey);
@@ -1424,6 +928,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 console.log(line + '| ' + ascii);
             }
+            return;
+        }
+        
+        // Load test program
+        if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+            e.preventDefault();
+            loadTestProgram();
             return;
         }
 
