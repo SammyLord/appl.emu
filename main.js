@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             CLI: () => cpu.setI(false), SEI: () => cpu.setI(true),
             CLV: () => cpu.setV(false),
             PHA: () => cpu.push(cpu.a), PLA: () => { cpu.a = cpu.pop(); cpu.setZ(cpu.a); cpu.setN(cpu.a); },
-            PHP: () => cpu.push(cpu.status | 0x10), PLP: () => { cpu.status = cpu.pop() | 0x20; },
+            PHP: () => cpu.push(cpu.status & ~0x10), PLP: () => { cpu.status = (cpu.pop() & ~0x10) | 0x20; },
             TAX: () => { cpu.x = cpu.a; cpu.setZ(cpu.x); cpu.setN(cpu.x); },
             TXA: () => { cpu.a = cpu.x; cpu.setZ(cpu.a); cpu.setN(cpu.a); },
             TAY: () => { cpu.y = cpu.a; cpu.setZ(cpu.y); cpu.setN(cpu.y); },
@@ -238,26 +238,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Now implement all official 6502 opcodes
     Object.assign(cpu.instructions, {
         // Row 0x0_
-        0x00: { execute: () => { 
-            /* BRK */ 
-            console.log(`BRK instruction at $${(cpu.pc - 1).toString(16).toUpperCase()}`);
-            const irqVector = cpu.read16(0xFFFE);
-            console.log(`IRQ vector points to $${irqVector.toString(16).toUpperCase()}`);
-            
-            // Check if we have a valid IRQ handler
-            if (irqVector === 0x0000 || irqVector === 0xFFFF) {
-                console.log('No valid IRQ handler found, treating BRK as NOP');
-                // Just continue execution instead of jumping to invalid handler
-                return;
-            }
-            
-            // For Apple I programs, BRK should properly vector through the IRQ handler
-            // Let the IRQ handler decide what to do (it might return to the program or go to Wozmon)
-            console.log('Executing BRK - vectoring through IRQ handler');
-            cpu.push16(cpu.pc + 1); 
-            cpu.push(cpu.status | 0x10); 
-            cpu.setI(true); 
-            cpu.pc = irqVector; 
+        0x00: { execute: () => {
+            /* BRK */
+            // A BRK instruction pushes PC+2 and status, then loads the IRQ vector into PC.
+            // It's a 1-byte instruction, but the PC effectively advances by 2.
+            // When this is called, PC is already at Addr+1 due to the fetch cycle.
+            cpu.push16(cpu.pc + 1);
+            cpu.push(cpu.status | 0x10); // Set B flag in status pushed to stack
+            cpu.setI(true);
+            cpu.pc = cpu.read16(0xFFFE);
         } },
         0x01: { execute: () => cpu.op.ORA(cpu.addr.indx()) },
         0x05: { execute: () => cpu.op.ORA(cpu.addr.zp()) },
