@@ -7,10 +7,11 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="emulator-container">
+    <div id="emulator">
         <div id="screen-container">
             <div id="screen">
                 <pre id="output">*</pre>
+                <input type="text" id="keyboard-input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
             </div>
             <div id="progress-container">
                 <div id="progress-status"></div>
@@ -21,7 +22,6 @@
             <button id="paste-button">Load from Clipboard</button>
         </div>
     </div>
-    <input type="text" id="keyboard-input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
     <script src="main.js"></script>
 </body>
 </html> 

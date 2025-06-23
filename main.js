@@ -602,24 +602,34 @@ document.addEventListener('DOMContentLoaded', () => {
         navigator.clipboard.readText().then(text => {
             const lines = text.split('\n');
             let bytesLoaded = 0;
+            let currentAddr = 0; // Keep track of the last address
             try {
                 lines.forEach((line, index) => {
                     line = line.trim();
                     if (!line) return;
 
-                    const parts = line.split(':');
-                    if (parts.length !== 2) throw new Error(`Invalid line format: "${line}"`);
-                    
-                    let addr = parseInt(parts[0], 16);
-                    if (isNaN(addr)) throw new Error(`Invalid address: "${parts[0]}"`);
+                    let parts;
+                    let byteStrings;
 
-                    const byteStrings = parts[1].trim().split(/\s+/);
+                    if (line.startsWith(':')) {
+                        // This is a continuation line
+                        parts = [null, line.substring(1)]; // No address part
+                        if (currentAddr === 0) throw new Error(`Continuation line found with no preceding address: "${line}"`);
+                    } else {
+                        parts = line.split(':');
+                        if (parts.length !== 2) throw new Error(`Invalid line format: "${line}"`);
+                        const addr = parseInt(parts[0], 16);
+                        if (isNaN(addr)) throw new Error(`Invalid address: "${parts[0]}"`);
+                        currentAddr = addr;
+                    }
+
+                    byteStrings = parts[1].trim().split(/\s+/);
                     byteStrings.forEach(byteString => {
                         if (!byteString) return;
                         const byte = parseInt(byteString, 16);
                         if (isNaN(byte)) throw new Error(`Invalid byte: "${byteString}"`);
-                        write(addr, byte);
-                        addr++;
+                        write(currentAddr, byte);
+                        currentAddr++;
                         bytesLoaded++;
                     });
                     updateProgress((index / lines.length) * 100);
