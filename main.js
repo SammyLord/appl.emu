@@ -434,6 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let ddrb_written = false;
     let suppressNextCR = false;
     let displayBuffer = [];
+    let hasReplacedStartupPrompt = false;
 
     // --- Progress Bar Functions ---
     let progressTimeout;
@@ -517,10 +518,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     return; // Swallow the CR that follows the Wozmon prompt
                 }
 
-                // Replace Wozmon's '\' prompt with 'READY'
-                if (charCode === 0x5C) { // Wozmon's '\' prompt
+                // Replace Wozmon's '\' prompt with 'READY' only on first occurrence (startup)
+                if (charCode === 0x5C && !hasReplacedStartupPrompt) { // Wozmon's '\' prompt
                     displayBuffer.push(...'READY\n');
                     suppressNextCR = true;
+                    hasReplacedStartupPrompt = true;
                     return;
                 }
 
@@ -734,12 +736,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             console.log(`Previous PC was: $${lastPc.toString(16).toUpperCase()}`);
                             console.log('EMERGENCY RESET: Corrupted execution detected, returning to Wozmon');
                             
-                            // Immediate reset - don't wait for stuck detection
-                            cpu.pc = 0xFF00;
-                            cpu.sp = 0xFF;
-                            lastPc = 0xFF00;
-                            stuckCount = 0;
-                            dataLoadedAt = null;
+                                                    // Immediate reset - don't wait for stuck detection
+                        cpu.pc = 0xFF00;
+                        cpu.sp = 0xFF;
+                        lastPc = 0xFF00;
+                        stuckCount = 0;
+                        dataLoadedAt = null;
+                        hasReplacedStartupPrompt = false; // Allow READY message on next startup
                             
                             // Fix corrupted IRQ vector
                             ram[0xFFFE] = 0x00;  // Low byte of $FF00 (Wozmon entry)
@@ -763,6 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.log('Use Ctrl+Shift+R to force execution, or this may be accidental execution of data');
                         cpu.pc = 0xFF00; // Jump back to Wozmon
                         dataLoadedAt = null; // Clear the protection
+                        hasReplacedStartupPrompt = false; // Allow READY message on next startup
                         break;
                     }
                     cpu.step();
@@ -797,6 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         cpu.sp = 0xFF;
                         lastPc = 0xFF00;
                         dataLoadedAt = null; // Clear protection since we're resetting
+                        hasReplacedStartupPrompt = false; // Allow READY message on next startup
                         
                         // Fix corrupted IRQ vector
                         ram[0xFFFE] = 0x00;  // Low byte of $FF00 (Wozmon entry)
@@ -878,6 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastPc = 0xFF00;
             stuckCount = 0;
             dataLoadedAt = null;
+            hasReplacedStartupPrompt = false; // Allow READY message on next startup
             return;
         }
         
