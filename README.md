@@ -27,6 +27,7 @@ This is a simple Apple 1 emulator built with HTML, CSS, and JavaScript that runs
 2. Clone that fork.
 3. Start developing!
 
+
 ### Testing with a "Hello World" Program
 
 You can enter and run programs directly from the Wozmon prompt. Here is a simple "Hello World" program to test the emulator.
